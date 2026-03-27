@@ -105,6 +105,7 @@ export default function SavedScreen() {
   const { user, isAuthenticated, setShowAuthModal } = useAuth();
   const { getUserSaves, getUserBoards, getBoardSaves, createBoard, deleteBoard } = useSaves();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<TabType>('elements');
   const [selectedBoardId, setSelectedBoardId] = useState<string | null>(null);
   const [showNewBoard, setShowNewBoard] = useState(false);
@@ -156,8 +157,6 @@ export default function SavedScreen() {
   if (!isAuthenticated) {
     return <LockedState onSignIn={() => setShowAuthModal(true)} />;
   }
-
-  const insets = useSafeAreaInsets();
 
   return (
     <View style={styles.container}>
