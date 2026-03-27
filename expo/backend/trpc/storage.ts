@@ -1,9 +1,10 @@
+import { createClient } from "@supabase/supabase-js";
 import { Designer, Project, DesignImage, Board, Save, Inquiry } from "@/types";
-import {
-  designers as mockDesigners,
-  projects as mockProjects,
-  images as mockImages,
-} from "@/mocks/data";
+
+const SUPABASE_URL = "https://tcdzizyejbsohcyjozjm.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRjZHppenllamJzb2hjeWpvemptIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ1NjQzNzAsImV4cCI6MjA5MDE0MDM3MH0.SsLggeYvv3-gvAMv_f1wUIW2Yb3Id0-gZPYIORtHl3M";
+
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 export interface UserRecord {
   id: string;
@@ -13,334 +14,290 @@ export interface UserRecord {
   created_at: string;
 }
 
-class InMemoryStorage {
-  designers: Designer[] = [...mockDesigners];
-  projects: Project[] = [...mockProjects];
-  images: DesignImage[] = [...mockImages];
-  users: UserRecord[] = [];
-  saves: Save[] = [];
-  boards: Board[] = [];
-  inquiries: Inquiry[] = [];
-
-  // ── Designers ──
-
-  getDesigners() {
-    return this.designers;
+class SupabaseStorage {
+  async getDesigners(): Promise<Designer[]> {
+    const { data, error } = await supabase
+      .from("designers")
+      .select("*")
+      .order("featured", { ascending: false })
+      .order("studio_name");
+    if (error) throw error;
+    return data ?? [];
   }
 
-  getDesignerById(id: string) {
-    return this.designers.find((d) => d.id === id) ?? null;
+  async getDesignerById(id: string): Promise<Designer | null> {
+    const { data, error } = await supabase.from("designers").select("*").eq("id", id).single();
+    if (error) return null;
+    return data;
   }
 
-  searchDesigners(query: string) {
-    const q = query.toLowerCase();
-    return this.designers.filter(
-      (d) =>
-        d.studio_name.toLowerCase().includes(q) ||
-        d.bio.toLowerCase().includes(q) ||
-        d.city.toLowerCase().includes(q)
-    );
+  async searchDesigners(query: string): Promise<Designer[]> {
+    const { data, error } = await supabase
+      .from("designers")
+      .select("*")
+      .or(`studio_name.ilike.%${query}%,bio.ilike.%${query}%,city.ilike.%${query}%`);
+    if (error) throw error;
+    return data ?? [];
   }
 
-  addDesigner(designer: Designer) {
-    this.designers.push(designer);
-    return designer;
+  async addDesigner(designer: Designer): Promise<Designer> {
+    const { data, error } = await supabase.from("designers").insert(designer).select().single();
+    if (error) throw error;
+    return data;
   }
 
-  updateDesigner(id: string, data: Partial<Designer>) {
-    const idx = this.designers.findIndex((d) => d.id === id);
-    if (idx === -1) return null;
-    this.designers[idx] = { ...this.designers[idx], ...data };
-    return this.designers[idx];
+  async updateDesigner(id: string, updates: Partial<Designer>): Promise<Designer | null> {
+    const { data, error } = await supabase.from("designers").update(updates).eq("id", id).select().single();
+    if (error) return null;
+    return data;
   }
 
-  deleteDesigner(id: string) {
-    const projectIds = this.projects
-      .filter((p) => p.designer_id === id)
-      .map((p) => p.id);
-    this.designers = this.designers.filter((d) => d.id !== id);
-    this.projects = this.projects.filter((p) => p.designer_id !== id);
-    this.images = this.images.filter(
-      (i) => !projectIds.includes(i.project_id)
-    );
+  async deleteDesigner(id: string): Promise<{ success: boolean }> {
+    const { error } = await supabase.from("designers").delete().eq("id", id);
+    if (error) throw error;
     return { success: true };
   }
 
-  // ── Projects ──
-
-  getProjects() {
-    return this.projects;
+  async getProjects(): Promise<Project[]> {
+    const { data, error } = await supabase.from("projects").select("*");
+    if (error) throw error;
+    return data ?? [];
   }
 
-  getProjectById(id: string) {
-    return this.projects.find((p) => p.id === id) ?? null;
+  async getProjectById(id: string): Promise<Project | null> {
+    const { data, error } = await supabase.from("projects").select("*").eq("id", id).single();
+    if (error) return null;
+    return data;
   }
 
-  getProjectsByDesigner(designerId: string) {
-    return this.projects.filter((p) => p.designer_id === designerId);
+  async getProjectsByDesigner(designerId: string): Promise<Project[]> {
+    const { data, error } = await supabase.from("projects").select("*").eq("designer_id", designerId);
+    if (error) throw error;
+    return data ?? [];
   }
 
-  addProject(project: Project) {
-    this.projects.push(project);
-    return project;
+  async addProject(project: Project): Promise<Project> {
+    const { data, error } = await supabase.from("projects").insert(project).select().single();
+    if (error) throw error;
+    return data;
   }
 
-  updateProject(id: string, data: Partial<Project>) {
-    const idx = this.projects.findIndex((p) => p.id === id);
-    if (idx === -1) return null;
-    this.projects[idx] = { ...this.projects[idx], ...data };
-    return this.projects[idx];
+  async updateProject(id: string, updates: Partial<Project>): Promise<Project | null> {
+    const { data, error } = await supabase.from("projects").update(updates).eq("id", id).select().single();
+    if (error) return null;
+    return data;
   }
 
-  deleteProject(id: string) {
-    this.projects = this.projects.filter((p) => p.id !== id);
-    this.images = this.images.filter((i) => i.project_id !== id);
+  async deleteProject(id: string): Promise<{ success: boolean }> {
+    const { error } = await supabase.from("projects").delete().eq("id", id);
+    if (error) throw error;
     return { success: true };
   }
 
-  // ── Images ──
-
-  getImages() {
-    return this.images;
+  async getImages(): Promise<DesignImage[]> {
+    const { data, error } = await supabase.from("design_images").select("*").order("sort_priority");
+    if (error) throw error;
+    return data ?? [];
   }
 
-  getImageById(id: string) {
-    return this.images.find((i) => i.id === id) ?? null;
+  async getImageById(id: string): Promise<DesignImage | null> {
+    const { data, error } = await supabase.from("design_images").select("*").eq("id", id).single();
+    if (error) return null;
+    return data;
   }
 
-  getImagesByProject(projectId: string) {
-    return this.images.filter((i) => i.project_id === projectId);
+  async getImagesByProject(projectId: string): Promise<DesignImage[]> {
+    const { data, error } = await supabase
+      .from("design_images")
+      .select("*")
+      .eq("project_id", projectId)
+      .order("sort_priority");
+    if (error) throw error;
+    return data ?? [];
   }
 
-  getImagesByDesigner(designerId: string) {
-    const projectIds = this.projects
-      .filter((p) => p.designer_id === designerId)
-      .map((p) => p.id);
-    return this.images.filter((i) => projectIds.includes(i.project_id));
+  async getImagesByDesigner(designerId: string): Promise<DesignImage[]> {
+    const projectIds = (await this.getProjectsByDesigner(designerId)).map((p) => p.id);
+    if (!projectIds.length) return [];
+    const { data, error } = await supabase
+      .from("design_images")
+      .select("*")
+      .in("project_id", projectIds)
+      .order("sort_priority");
+    if (error) throw error;
+    return data ?? [];
   }
 
-  searchImages(filters: {
+  async searchImages(filters: {
     query?: string;
     roomType?: string;
     designStyle?: string;
     projectType?: string;
     designerId?: string;
-  }) {
-    let results = [...this.images];
-
-    if (filters.designerId) {
-      const projectIds = this.projects
-        .filter((p) => p.designer_id === filters.designerId)
-        .map((p) => p.id);
-      results = results.filter((i) => projectIds.includes(i.project_id));
-    }
-
-    if (filters.roomType) {
-      results = results.filter((i) => i.room_type === filters.roomType);
-    }
-
-    if (filters.designStyle) {
-      results = results.filter((i) =>
-        i.style_tags.includes(filters.designStyle as any)
-      );
-    }
-
-    if (filters.projectType) {
-      results = results.filter((i) => {
-        const project = this.projects.find((p) => p.id === i.project_id);
-        return project?.project_type === filters.projectType;
-      });
-    }
-
-    if (filters.query) {
-      const q = filters.query.toLowerCase();
-      results = results.filter((i) => {
-        const project = this.projects.find((p) => p.id === i.project_id);
-        const designer = project
-          ? this.designers.find((d) => d.id === project.designer_id)
-          : null;
-        return (
-          i.room_type.toLowerCase().includes(q) ||
-          i.style_tags.some((t) => t.toLowerCase().includes(q)) ||
-          (project?.project_name.toLowerCase().includes(q) ?? false) ||
-          (designer?.studio_name.toLowerCase().includes(q) ?? false)
-        );
-      });
-    }
-
-    return results;
+  }): Promise<DesignImage[]> {
+    let q = supabase.from("design_images").select("*, projects!inner(designer_id, project_type, project_name)");
+    if (filters.designerId) q = q.eq("projects.designer_id", filters.designerId);
+    if (filters.roomType) q = q.eq("room_type", filters.roomType);
+    if (filters.designStyle) q = q.contains("style_tags", [filters.designStyle]);
+    if (filters.projectType) q = q.eq("projects.project_type", filters.projectType);
+    const { data, error } = await q.order("sort_priority");
+    if (error) throw error;
+    return data ?? [];
   }
 
-  addImage(image: DesignImage) {
-    this.images.push(image);
-    return image;
+  async addImage(image: DesignImage): Promise<DesignImage> {
+    const { data, error } = await supabase.from("design_images").insert(image).select().single();
+    if (error) throw error;
+    return data;
   }
 
-  deleteImage(id: string) {
-    this.images = this.images.filter((i) => i.id !== id);
+  async deleteImage(id: string): Promise<{ success: boolean }> {
+    const { error } = await supabase.from("design_images").delete().eq("id", id);
+    if (error) throw error;
     return { success: true };
   }
 
-  // ── Saves ──
-
-  getSavesByUser(userId: string) {
-    return this.saves.filter((s) => s.user_id === userId);
+  async getSavesByUser(userId: string): Promise<Save[]> {
+    const { data, error } = await supabase.from("saves").select("*").eq("user_id", userId);
+    if (error) throw error;
+    return data ?? [];
   }
 
-  saveImage(userId: string, imageId: string) {
-    const existing = this.saves.find(
-      (s) => s.user_id === userId && s.image_id === imageId
-    );
-    if (existing) return existing;
-    const save: Save = {
-      id: `s_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      user_id: userId,
-      image_id: imageId,
-      board_id: null,
-      created_at: new Date().toISOString(),
-    };
-    this.saves.push(save);
-    return save;
+  async saveImage(userId: string, imageId: string): Promise<Save> {
+    const id = `s_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const { data, error } = await supabase
+      .from("saves")
+      .upsert({ id, user_id: userId, image_id: imageId, board_id: null })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
   }
 
-  unsaveImage(userId: string, imageId: string) {
-    this.saves = this.saves.filter(
-      (s) => !(s.user_id === userId && s.image_id === imageId)
-    );
+  async unsaveImage(userId: string, imageId: string): Promise<{ success: boolean }> {
+    const { error } = await supabase.from("saves").delete().eq("user_id", userId).eq("image_id", imageId);
+    if (error) throw error;
     return { success: true };
   }
 
-  isImageSaved(userId: string, imageId: string) {
-    return this.saves.some(
-      (s) => s.user_id === userId && s.image_id === imageId
-    );
+  async isImageSaved(userId: string, imageId: string): Promise<boolean> {
+    const { data } = await supabase.from("saves").select("id").eq("user_id", userId).eq("image_id", imageId).single();
+    return !!data;
   }
 
-  moveToBoard(saveId: string, boardId: string | null) {
-    const idx = this.saves.findIndex((s) => s.id === saveId);
-    if (idx === -1) return null;
-    this.saves[idx] = { ...this.saves[idx], board_id: boardId };
-    return this.saves[idx];
+  async moveToBoard(saveId: string, boardId: string | null): Promise<Save | null> {
+    const { data, error } = await supabase.from("saves").update({ board_id: boardId }).eq("id", saveId).select().single();
+    if (error) return null;
+    return data;
   }
 
-  getSavesByBoard(boardId: string) {
-    return this.saves.filter((s) => s.board_id === boardId);
+  async getSavesByBoard(boardId: string): Promise<Save[]> {
+    const { data, error } = await supabase.from("saves").select("*").eq("board_id", boardId);
+    if (error) throw error;
+    return data ?? [];
   }
 
-  // ── Boards ──
-
-  getBoardsByUser(userId: string) {
-    return this.boards.filter((b) => b.user_id === userId);
+  async getBoardsByUser(userId: string): Promise<Board[]> {
+    const { data, error } = await supabase.from("boards").select("*").eq("user_id", userId);
+    if (error) throw error;
+    return data ?? [];
   }
 
-  getBoardById(id: string) {
-    return this.boards.find((b) => b.id === id) ?? null;
+  async getBoardById(id: string): Promise<Board | null> {
+    const { data, error } = await supabase.from("boards").select("*").eq("id", id).single();
+    if (error) return null;
+    return data;
   }
 
-  createBoard(userId: string, name: string) {
-    const userBoards = this.boards.filter((b) => b.user_id === userId);
-    if (userBoards.length >= 12) {
-      throw new Error("Maximum 12 boards allowed");
-    }
-    const board: Board = {
-      id: `b_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      user_id: userId,
-      name,
-      created_at: new Date().toISOString(),
-    };
-    this.boards.push(board);
-    return board;
+  async createBoard(userId: string, name: string): Promise<Board> {
+    const { count } = await supabase.from("boards").select("id", { count: "exact" }).eq("user_id", userId);
+    if ((count ?? 0) >= 12) throw new Error("Maximum 12 boards allowed");
+    const id = `b_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const { data, error } = await supabase.from("boards").insert({ id, user_id: userId, name }).select().single();
+    if (error) throw error;
+    return data;
   }
 
-  renameBoard(boardId: string, name: string) {
-    const idx = this.boards.findIndex((b) => b.id === boardId);
-    if (idx === -1) return null;
-    this.boards[idx] = { ...this.boards[idx], name };
-    return this.boards[idx];
+  async renameBoard(boardId: string, name: string): Promise<Board | null> {
+    const { data, error } = await supabase.from("boards").update({ name }).eq("id", boardId).select().single();
+    if (error) return null;
+    return data;
   }
 
-  deleteBoard(boardId: string) {
-    this.boards = this.boards.filter((b) => b.id !== boardId);
-    this.saves = this.saves.map((s) =>
-      s.board_id === boardId ? { ...s, board_id: null } : s
-    );
+  async deleteBoard(boardId: string): Promise<{ success: boolean }> {
+    const { error } = await supabase.from("boards").delete().eq("id", boardId);
+    if (error) throw error;
     return { success: true };
   }
 
-  // ── Inquiries ──
-
-  getInquiries() {
-    return this.inquiries;
+  async getInquiries(): Promise<Inquiry[]> {
+    const { data, error } = await supabase.from("inquiries").select("*");
+    if (error) throw error;
+    return data ?? [];
   }
 
-  getInquiriesByDesigner(designerId: string) {
-    return this.inquiries.filter((i) => i.designer_id === designerId);
+  async getInquiriesByDesigner(designerId: string): Promise<Inquiry[]> {
+    const { data, error } = await supabase.from("inquiries").select("*").eq("designer_id", designerId);
+    if (error) throw error;
+    return data ?? [];
   }
 
-  getInquiriesByUser(userId: string) {
-    return this.inquiries.filter((i) => i.user_id === userId);
+  async getInquiriesByUser(userId: string): Promise<Inquiry[]> {
+    const { data, error } = await supabase.from("inquiries").select("*").eq("user_id", userId);
+    if (error) throw error;
+    return data ?? [];
   }
 
-  createInquiry(data: Omit<Inquiry, "id" | "created_at">) {
-    const inquiry: Inquiry = {
-      ...data,
-      id: `inq_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      created_at: new Date().toISOString(),
-    };
-    this.inquiries.push(inquiry);
-    return inquiry;
+  async createInquiry(data: Omit<Inquiry, "id" | "created_at">): Promise<Inquiry> {
+    const id = `inq_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const { data: result, error } = await supabase.from("inquiries").insert({ ...data, id }).select().single();
+    if (error) throw error;
+    return result;
   }
 
-  // ── Users ──
-
-  getUser(id: string) {
-    return this.users.find((u) => u.id === id) ?? null;
+  async getUser(id: string): Promise<UserRecord | null> {
+    const { data, error } = await supabase.from("users").select("*").eq("id", id).single();
+    if (error) return null;
+    return data;
   }
 
-  getUserByEmail(email: string) {
-    return this.users.find((u) => u.email === email) ?? null;
+  async getUserByEmail(email: string): Promise<UserRecord | null> {
+    const { data, error } = await supabase.from("users").select("*").eq("email", email).single();
+    if (error) return null;
+    return data;
   }
 
-  upsertUser(data: { email: string; name: string }) {
-    const existing = this.users.find((u) => u.email === data.email);
+  async upsertUser(data: { email: string; name: string }): Promise<UserRecord> {
+    const existing = await this.getUserByEmail(data.email);
     if (existing) {
-      existing.name = data.name;
-      return existing;
+      const { data: updated } = await supabase.from("users").update({ name: data.name }).eq("email", data.email).select().single();
+      return updated;
     }
-    const newUser: UserRecord = {
-      id: `u_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      email: data.email,
-      name: data.name,
-      role: "homeowner",
-      created_at: new Date().toISOString(),
-    };
-    this.users.push(newUser);
+    const id = `u_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const { data: newUser, error } = await supabase.from("users").insert({ id, ...data, role: "homeowner" }).select().single();
+    if (error) throw error;
     return newUser;
   }
 
-  getAllUsers() {
-    return this.users;
+  async getAllUsers(): Promise<UserRecord[]> {
+    const { data, error } = await supabase.from("users").select("*");
+    if (error) throw error;
+    return data ?? [];
   }
 
-  getTotalSaves() {
-    return this.saves.length;
+  async getTotalSaves(): Promise<number> {
+    const { count } = await supabase.from("saves").select("id", { count: "exact" });
+    return count ?? 0;
   }
 
-  getTotalBoards() {
-    return this.boards.length;
+  async getTotalBoards(): Promise<number> {
+    const { count } = await supabase.from("boards").select("id", { count: "exact" });
+    return count ?? 0;
   }
 
-  // ── Admin ──
-
-  resetToDefaults() {
-    this.designers = [...mockDesigners];
-    this.projects = [...mockProjects];
-    this.images = [...mockImages];
-    this.saves = [];
-    this.boards = [];
-    this.inquiries = [];
-    return { success: true };
+  async resetToDefaults(): Promise<{ success: boolean }> {
+    throw new Error("Reset not available in production mode");
   }
 }
 
-export const storage = new InMemoryStorage();
+export const storage = new SupabaseStorage();
